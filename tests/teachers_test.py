@@ -1,6 +1,9 @@
 import json
 import pytest
+from sqlalchemy.ext.declarative import declarative_base
 from core.models.assignments import GradeEnum, AssignmentStateEnum
+
+Base = declarative_base()
 
 def test_get_assignments_teacher_1(client, h_teacher_1):
     response = client.get(

@@ -10,3 +10,12 @@ class FyleError(Exception):
         res = dict()
         res['message'] = self.message
         return res
+
+class ResourceNotFoundException(Exception):
+    """Exception raised when a requested resource is not found"""
+    pass
+
+class InvalidRequestException(FyleError):
+    """Exception raised when the request is invalid"""
+    def __init__(self, message="Invalid request"):
+        super().__init__(status_code=400, message=message)
