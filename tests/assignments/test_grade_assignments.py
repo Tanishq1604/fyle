@@ -8,22 +8,24 @@ from core.models.assignments import Assignment, GradeEnum, AssignmentStateEnum
 class TestGradeAssignment(BaseTestCase):
     def setUp(self):
         super().setUp()
-        # Create test assignment explicitly assigned to teacher_id=1
-        self.assignment = Assignment(
-            student_id=1,
-            teacher_id=1,
-            content="Test Assignment",
-            state=AssignmentStateEnum.SUBMITTED
-        )
-        db.session.add(self.assignment)
-        db.session.commit()
+        # Use assignment ID 30 which is in SUBMITTED state
+        self.assignment = Assignment.get_by_id(30)
+        if not self.assignment:
+            self.assignment = Assignment(
+                student_id=1,
+                teacher_id=1,
+                content="Test Assignment",
+                state=AssignmentStateEnum.SUBMITTED
+            )
+            db.session.add(self.assignment)
+            db.session.commit()
 
     def test_teacher_grade_assignment_success(self):
         """Test successful grading of assignment by teacher"""
         headers = {
             'X-Principal': json.dumps({
-                'user_id': 3,
-                'teacher_id': 1
+                'user_id': 3,  # teacher1 user_id
+                'teacher_id': 1  # teacher1 id
             })
         }
         data = {
@@ -44,11 +46,10 @@ class TestGradeAssignment(BaseTestCase):
 
     def test_teacher_grade_unassigned_assignment(self):
         """Test grading of assignment not assigned to teacher"""
-        # Create test data
         headers = {
             'X-Principal': json.dumps({
-                'user_id': 2,
-                'teacher_id': 5  # Different teacher
+                'user_id': 4,  # teacher2 user_id
+                'teacher_id': 2  # teacher2 id
             })
         }
         data = {
@@ -56,23 +57,22 @@ class TestGradeAssignment(BaseTestCase):
             'grade': GradeEnum.A.value
         }
         
-        # Make the request
         response = self.client.post(
             '/teacher/assignments/grade',
             headers=headers,
             json=data
         )
         
-        # Verify response
         assert response.status_code == 403
         response_data = json.loads(response.data)
         assert response_data['error'] == 'ValidationError'
         assert response_data['message'] == 'Assignment not assigned to this teacher'
         
         # Verify assignment wasn't modified
-        db_assignment = Assignment.query.get(self.assignment.id)
-        assert db_assignment.grade is None
-        assert db_assignment.state == AssignmentStateEnum.SUBMITTED
+        db.session.refresh(self.assignment)
+        assert self.assignment.grade is None
+        assert self.assignment.state == AssignmentStateEnum.SUBMITTED
+        assert self.assignment.teacher_id == 1
 
     def test_principal_grade_assignment_success(self):
         """Test successful grading of assignment by principal"""
@@ -102,8 +102,8 @@ class TestGradeAssignment(BaseTestCase):
         """Test grading with invalid grade value"""
         headers = {
             'X-Principal': json.dumps({
-                'user_id': 3,
-                'teacher_id': 1
+                'user_id': 3,  # teacher1 user_id
+                'teacher_id': 1  # teacher1 id
             })
         }
         data = {
@@ -120,19 +120,28 @@ class TestGradeAssignment(BaseTestCase):
         assert response.status_code == 400
 
     def test_grade_non_submitted_assignment(self):
-        """Test grading assignment that is not in submitted state"""
-        # Change assignment state to draft
-        self.assignment.state = AssignmentStateEnum.DRAFT
+        """Test grading assignment that is not in draft state"""
+        # Create a new draft assignment
+        draft_assignment = Assignment(
+            student_id=1,
+            teacher_id=1,
+            content="Test Draft Assignment",
+            state=AssignmentStateEnum.DRAFT
+        )
+        db.session.add(draft_assignment)
         db.session.commit()
-
+        
+        # Ensure the assignment was created with an ID
+        assert draft_assignment.id is not None
+        
         headers = {
             'X-Principal': json.dumps({
-                'user_id': 3,
-                'teacher_id': 1
+                'user_id': 3,  # teacher1 user_id
+                'teacher_id': 1  # teacher1 id
             })
         }
         data = {
-            'id': self.assignment.id,
+            'id': draft_assignment.id,
             'grade': GradeEnum.A.value
         }
         
@@ -143,4 +152,11 @@ class TestGradeAssignment(BaseTestCase):
         )
         
         assert response.status_code == 400
-        assert b'Only submitted assignments can be graded' in response.data
+        response_data = json.loads(response.data)
+        assert response_data['error'] == 'ValidationError'
+        assert response_data['message'] == 'Only submitted assignments can be graded'
+        
+        # Verify no changes were made
+        db.session.refresh(draft_assignment)
+        assert draft_assignment.grade is None
+        assert draft_assignment.state == AssignmentStateEnum.DRAFT

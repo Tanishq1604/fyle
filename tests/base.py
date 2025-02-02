@@ -9,7 +9,7 @@ class BaseTestCase(unittest.TestCase):
     def setUp(self):
         self.app = create_app({
             'TESTING': True,
-            'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:'
+            'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:'  # Use in-memory database for tests
         })
         self.client = self.app.test_client()
         self.app_context = self.app.app_context()
