@@ -1,4 +1,5 @@
-from flask import jsonify, Blueprint
+from flask import jsonify, Blueprint, Flask
+from flask_migrate import Migrate
 from marshmallow.exceptions import ValidationError
 from core.apis.assignments import student_assignments_resources, teacher_assignments_resources, \
     principal_assignments_resources
@@ -8,6 +9,9 @@ from core.libs.exceptions import FyleError
 from werkzeug.exceptions import HTTPException
 from sqlalchemy.exc import IntegrityError
 from core import create_app
+from core import db
+from core.admin import init_admin
+import os
 
 def create_main_blueprint():
     main_bp = Blueprint('main', __name__)
@@ -50,8 +54,34 @@ def register_blueprints(app):
 
     return app
 
+def create_app(config=None):
+    app = Flask(__name__)
+    
+    # Get the instance path
+    instance_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'instance')
+    if not os.path.exists(instance_path):
+        os.makedirs(instance_path)
+    
+    # Default configuration
+    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{os.path.join(instance_path, "store.sqlite3")}'
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    app.config['SECRET_KEY'] = 'your-secret-key-here'
+    
+    if config:
+        app.config.update(config)
+    
+    db.init_app(app)
+    migrate = Migrate(app, db)  # Add this line
+    
+    with app.app_context():
+        db.create_all()  # Ensure all tables are created
+        init_admin(app)  # Initialize admin interface
+    
+    app = register_blueprints(app)
+    
+    return app
+
 app = create_app()
-app = register_blueprints(app)
 
 if __name__ == '__main__':
     app.run()
